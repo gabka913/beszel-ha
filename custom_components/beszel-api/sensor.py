@@ -1,4 +1,8 @@
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass
+)
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, LOGGER
 
@@ -13,20 +17,26 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         for system in systems:
             try:
+                # Get stats for this system
+                system_stats = stats_data.get(system.id, {})
+
                 entities.append(BeszelCPUSensor(coordinator, system))
                 entities.append(BeszelRAMSensor(coordinator, system))
+                entities.append(BeszelRAMUsageSensor(coordinator, system))
+                entities.append(BeszelRAMTotalSensor(coordinator, system))
                 entities.append(BeszelDiskSensor(coordinator, system))
+                entities.append(BeszelDiskUsageSensor(coordinator, system))
+                entities.append(BeszelDiskTotalSensor(coordinator, system))
                 entities.append(BeszelBandwidthSensor(coordinator, system))
                 entities.append(BeszelTemperatureSensor(coordinator, system))
                 entities.append(BeszelUptimeSensor(coordinator, system))
 
-                # Get stats for this system
-                system_stats = stats_data.get(system.id, {})
-
                 # Create EFS sensors if EFS data is available
                 if system_stats and 'efs' in system_stats and isinstance(system_stats['efs'], dict):
                     for disk_name in system_stats['efs'].keys():
-                        entities.append(BeszelEFSDiskSensor(coordinator, system, disk_name, system_stats))
+                        entities.append(BeszelEFSDiskSensor(coordinator, system, disk_name))
+                        entities.append(BeszelEFSDiskUsageSensor(coordinator, system, disk_name))
+                        entities.append(BeszelEFSDiskTotalSensor(coordinator, system, disk_name))
                         LOGGER.info(f"Created EFS sensor for {system.name} - {disk_name}")
 
             except Exception as e:
@@ -51,6 +61,10 @@ class BeszelBaseSensor(CoordinatorEntity, SensorEntity):
             if s.id == self._system_id:
                 return s
         return None
+
+    @property
+    def system_stats(self):
+        return self.coordinator.data['stats'][self._system_id]
 
     @property
     def device_info(self):
@@ -109,6 +123,56 @@ class BeszelRAMSensor(BeszelBaseSensor):
     def native_unit_of_measurement(self):
         return "%"
 
+class BeszelRAMUsageSensor(BeszelBaseSensor):
+    @property
+    def unique_id(self):
+        return f"beszel_{self._system_id}_used_ram"
+
+    @property
+    def name(self):
+        return f"{self.system.name} Used RAM" if self.system else None
+
+    @property
+    def icon(self):
+        return "mdi:chip"
+
+    @property
+    def native_value(self):
+        return self.system_stats.get("mu") if self.system_stats else None
+
+    @property
+    def native_unit_of_measurement(self):
+        return "GB"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.DATA_SIZE
+
+class BeszelRAMTotalSensor(BeszelBaseSensor):
+    @property
+    def unique_id(self):
+        return f"beszel_{self._system_id}_total_ram"
+
+    @property
+    def name(self):
+        return f"{self.system.name} Total RAM" if self.system else None
+
+    @property
+    def icon(self):
+        return "mdi:chip"
+
+    @property
+    def native_value(self):
+        return self.system_stats.get("m") if self.system_stats else None
+
+    @property
+    def native_unit_of_measurement(self):
+        return "GB"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.DATA_SIZE
+
 class BeszelDiskSensor(BeszelBaseSensor):
 
     @property
@@ -130,6 +194,58 @@ class BeszelDiskSensor(BeszelBaseSensor):
     @property
     def native_unit_of_measurement(self):
         return "%"
+
+class BeszelDiskUsageSensor(BeszelBaseSensor):
+
+    @property
+    def unique_id(self):
+        return f"beszel_{self._system_id}_used_disk"
+
+    @property
+    def name(self):
+        return f"{self.system.name} Used Disk" if self.system else None
+
+    @property
+    def icon(self):
+        return "mdi:harddisk"
+
+    @property
+    def native_value(self):
+        return self.system_stats.get("du") if self.system_stats else None
+
+    @property
+    def native_unit_of_measurement(self):
+        return "GB"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.DATA_SIZE
+
+class BeszelDiskTotalSensor(BeszelBaseSensor):
+
+    @property
+    def unique_id(self):
+        return f"beszel_{self._system_id}_total_disk"
+
+    @property
+    def name(self):
+        return f"{self.system.name} Total Disk" if self.system else None
+
+    @property
+    def icon(self):
+        return "mdi:harddisk"
+
+    @property
+    def native_value(self):
+        return self.system_stats.get("d") if self.system_stats else None
+
+    @property
+    def native_unit_of_measurement(self):
+        return "GB"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.DATA_SIZE
 
 class BeszelBandwidthSensor(BeszelBaseSensor):
     @property
@@ -203,10 +319,9 @@ class BeszelUptimeSensor(BeszelBaseSensor):
         return "minutes"
 
 class BeszelEFSDiskSensor(BeszelBaseSensor):
-    def __init__(self, coordinator, system, disk_name, stats_data):
+    def __init__(self, coordinator, system, disk_name):
         super().__init__(coordinator, system)
         self._disk_name = disk_name
-        self._stats_data = stats_data
 
     @property
     def unique_id(self):
@@ -222,10 +337,10 @@ class BeszelEFSDiskSensor(BeszelBaseSensor):
 
     @property
     def native_value(self):
-        if not self._stats_data:
+        if not self.system_stats:
             return None
 
-        efs_data = self._stats_data.get('efs', {})
+        efs_data = self.system_stats.get('efs', {})
         disk_data = efs_data.get(self._disk_name, {})
 
         total_space = disk_data.get('d')
@@ -243,10 +358,10 @@ class BeszelEFSDiskSensor(BeszelBaseSensor):
     @property
     def extra_state_attributes(self):
         """Return additional state attributes for the EFS disk."""
-        if not self._stats_data:
+        if not self.system_stats:
             return {}
 
-        efs_data = self._stats_data.get('efs', {})
+        efs_data = self.system_stats.get('efs', {})
         disk_data = efs_data.get(self._disk_name, {})
 
         return {
@@ -255,3 +370,73 @@ class BeszelEFSDiskSensor(BeszelBaseSensor):
             "read_mb_s": disk_data.get('r'),
             "write_mb_s": disk_data.get('w'),
         }
+
+class BeszelEFSDiskUsageSensor(BeszelBaseSensor):
+    def __init__(self, coordinator, system, disk_name):
+        super().__init__(coordinator, system)
+        self._disk_name = disk_name
+
+    @property
+    def unique_id(self):
+        return f"beszel_{self._system_id}_efs_{self._disk_name}_used"
+
+    @property
+    def name(self):
+        return f"{self.system.name} EFS {self._disk_name} Used" if self.system else None
+
+    @property
+    def icon(self):
+        return "mdi:harddisk"
+
+    @property
+    def native_value(self):
+        if not self.system_stats:
+            return None
+
+        efs_data = self.system_stats.get('efs', {})
+        disk_data = efs_data.get(self._disk_name, {})
+
+        return disk_data.get('du')
+
+    @property
+    def native_unit_of_measurement(self):
+        return "GB"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.DATA_SIZE
+
+class BeszelEFSDiskTotalSensor(BeszelBaseSensor):
+    def __init__(self, coordinator, system, disk_name):
+        super().__init__(coordinator, system)
+        self._disk_name = disk_name
+
+    @property
+    def unique_id(self):
+        return f"beszel_{self._system_id}_efs_{self._disk_name}_total"
+
+    @property
+    def name(self):
+        return f"{self.system.name} EFS {self._disk_name} Total" if self.system else None
+
+    @property
+    def icon(self):
+        return "mdi:harddisk"
+
+    @property
+    def native_value(self):
+        if not self.system_stats:
+            return None
+
+        efs_data = self.system_stats.get('efs', {})
+        disk_data = efs_data.get(self._disk_name, {})
+
+        return disk_data.get('d')
+
+    @property
+    def native_unit_of_measurement(self):
+        return "GB"
+
+    @property
+    def device_class(self):
+        return SensorDeviceClass.DATA_SIZE

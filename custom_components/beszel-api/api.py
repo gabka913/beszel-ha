@@ -24,6 +24,9 @@ class BeszelApiClient:
         try:
             self._ensure_client()
             records = self._client.collection("systems").get_full_list()
+
+            LOGGER.debug(f"Fetched systems: {[r.__dict__ for r in records]}")
+
             return records
         except Exception as e:
             LOGGER.error(f"Failed to fetch systems: {e}")
@@ -37,6 +40,10 @@ class BeszelApiClient:
             records = self._client.collection("system_stats").get_list(
                 1, 1, {"filter": f"system = '{system_id}'", "sort": "-created"}
             )
+
+            if records.items:
+                LOGGER.debug(f"System stats data: {records.items[0].__dict__}")
+
             if records.items:
                 return records.items[0]
             return None
