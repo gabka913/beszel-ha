@@ -20,7 +20,7 @@ class BeszelStatusBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def system(self):
-        systems = self.coordinator.data['systems']
+        systems = self.coordinator['systems']
         for s in systems:
             if s.id == self._system_id:
                 return s
