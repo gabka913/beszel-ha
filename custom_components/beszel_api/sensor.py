@@ -281,6 +281,7 @@ class BeszelNetworkSendSensor(BeszelBaseSensor):
     def suggested_display_precision(self):
         return 2
 
+
 class BeszelTemperatureSensor(BeszelBaseSensor):
     @property
     def unique_id(self):

@@ -3,10 +3,11 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
     entities = []
 
-    systems = coordinator['systems']
+    systems = coordinator.data['systems']
 
     for system in systems:
         entities.append(BeszelStatusBinarySensor(coordinator, system))
